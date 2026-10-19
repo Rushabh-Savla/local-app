@@ -1,0 +1,4 @@
+# Lightweight Client Dependencies for Annotator Workstations
+# Only HTTP client is required. No PostgreSQL, Docker, or server libraries needed.
+httpx>=0.27.0
+

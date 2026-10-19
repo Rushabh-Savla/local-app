@@ -1,0 +1,30 @@
+# ==============================================================================
+# Central Annotator Agent Launcher for Windows PowerShell
+# ==============================================================================
+param(
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$ScriptArgs
+)
+
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$env:PYTHONPATH = $ScriptDir
+
+if (-not $env:SERVER_URL) {
+    $env:SERVER_URL = "http://localhost:8080"
+}
+
+if (-not $env:ROOT) {
+    $env:ROOT = "$HOME\nas_annotation_workspace"
+}
+
+# Auto-detect virtualenv
+$PythonBin = "python"
+if (Test-Path "$ScriptDir\.venv\Scripts\python.exe") {
+    $PythonBin = "$ScriptDir\.venv\Scripts\python.exe"
+} elseif (Test-Path "$env:VIRTUAL_ENV\Scripts\python.exe") {
+    $PythonBin = "$env:VIRTUAL_ENV\Scripts\python.exe"
+}
+
+Write-Host "Starting Annotator Desktop Agent using $PythonBin..."
+& $PythonBin -m annotator_agent.agent --server-url $env:SERVER_URL --local-root $env:ROOT @ScriptArgs
+

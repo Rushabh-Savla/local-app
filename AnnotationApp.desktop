@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=NAS Annotation Workstation
+Comment=Centralized Dataset Annotation Desktop App
+Exec=bash -c "cd '%k' && ./run_gui.sh"
+Terminal=false
+Categories=Graphics;Development;
+

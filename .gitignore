@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local machine config
+.env
+.app_credentials.json
+
+# OS/editor
+.DS_Store
+.vscode/
+
+# Logs
+*.log
