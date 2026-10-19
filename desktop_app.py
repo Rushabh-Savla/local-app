@@ -504,7 +504,8 @@ class AnnotationDesktopApp(tk.Tk):
     def _init_agent(self) -> None:
         if AnnotatorAgent is not None:
             default_server = self._get_default_server_url()
-            default_root = os.getenv("ROOT", str(Path.home() / "nas_annotation_workspace"))
+            raw_root = (os.getenv("ROOT") or str(Path.home() / "nas_annotation_workspace")).strip().strip("'\"")
+            default_root = os.path.expandvars(os.path.expanduser(raw_root))
             self.agent = AnnotatorAgent(server_url=default_server, local_root=default_root)
 
     def _load_saved_credentials(self) -> tuple[str, str]:

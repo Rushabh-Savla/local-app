@@ -28,7 +28,9 @@ class AnnotatorAgent:
         xanylabeling_bin: str = "xanylabeling",
     ):
         self.server_url = server_url
-        self.root = Path(local_root).expanduser().resolve()
+        clean_root = str(local_root or "~/nas_annotation_workspace").strip().strip("'\"")
+        clean_root = os.path.expandvars(os.path.expanduser(clean_root))
+        self.root = Path(clean_root).resolve()
         self.batch_size = batch_size
         self.xanylabeling_bin = xanylabeling_bin
 

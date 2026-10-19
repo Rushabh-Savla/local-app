@@ -105,7 +105,7 @@ ROOT="$HOME/nas_annotation_workspace"
 
 Example on Linux:
 ```bash
-SERVER_URL="http://192.168.1.103:8080"
+SERVER_URL="http://192.168.1.10:8080"
 ROOT="/home/easemyai/nas_annotation_workspace"
 # Or conveniently:
 # ROOT="$HOME/nas_annotation_workspace"
