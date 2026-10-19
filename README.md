@@ -20,7 +20,7 @@ This app is designed to be run locally on a workstation and is not a Dockerized 
 ## Project Structure
 
 ```text
-local_app/
+local-app/
 ├── README.md
 ├── .env.example
 ├── .env                     # local machine config; not committed to Git
@@ -64,7 +64,7 @@ local_app/
 
 #### Linux / macOS
 ```bash
-cd local_app
+cd local-app
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
@@ -73,7 +73,7 @@ pip install -r requirements_agent.txt
 
 #### Windows PowerShell
 ```powershell
-cd local_app
+cd local-app
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -82,7 +82,7 @@ pip install -r requirements_agent.txt
 
 #### Windows CMD
 ```cmd
-cd local_app
+cd local-app
 py -3.11 -m venv .venv
 .venv\Scripts\activate.bat
 python -m pip install --upgrade pip
@@ -96,27 +96,41 @@ pip install -r requirements_agent.txt
 cp .env.example .env
 ```
 
-Then edit `.env` with absolute paths:
+Then edit `.env` for your machine:
 
 ```bash
 SERVER_URL="http://<SERVER_IP>:8080"
-ROOT="/home/<your_user>/nas_annotation_workspace"
+ROOT="$HOME/nas_annotation_workspace"
 ```
 
-Example:
-
+Example on Linux:
 ```bash
-SERVER_URL="http://192.168.1.10:8080"
-ROOT="/home/annotator/nas_annotation_workspace"
+SERVER_URL="http://192.168.1.103:8080"
+ROOT="/home/easemyai/nas_annotation_workspace"
+# Or conveniently:
+# ROOT="$HOME/nas_annotation_workspace"
 ```
 
-Use the real absolute path for the current PC. Do not leave `ROOT` as a relative value like `home/nas_annotation_workspace` or `./nas_annotation_workspace`.
+Example on Windows:
+```bash
+SERVER_URL="http://192.168.1.103:8080"
+ROOT="C:\\nas_annotation_workspace"
+```
+
+> **PermissionError Troubleshooting (`Permission denied: '/home/annotator'`):**
+> If you encounter:
+> ```text
+> PermissionError: [Errno 13] Permission denied: '/home/annotator'
+> ```
+> This occurs because `.env` is set to `/home/annotator/nas_annotation_workspace`, but your Linux username is different (e.g. `easemyai`). Linux users do not have permissions to create new folders directly in `/home/`.
+> **Fix:** Change `ROOT` in `.env` to point inside your actual user directory, e.g.:
+> `ROOT="$HOME/nas_annotation_workspace"` or `ROOT="/home/<your_username>/nas_annotation_workspace"`.
 
 ### 3) Run the app
 
 #### Linux / macOS
 ```bash
-cd local_app
+cd local-app
 source .venv/bin/activate
 ./run_gui.sh
 ```
@@ -128,7 +142,7 @@ python3 desktop_app.py
 
 #### Windows
 ```cmd
-cd local_app
+cd local-app
 .venv\Scripts\activate.bat
 run_gui.bat
 ```
