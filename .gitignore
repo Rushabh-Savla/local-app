@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+*.db
+*.sqlite3
 
 # Virtual environments
 .venv/
@@ -19,3 +21,4 @@ env/
 
 # Logs
 *.log
+*.tmp
