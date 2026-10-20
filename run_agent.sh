@@ -7,7 +7,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PYTHONPATH="$SCRIPT_DIR"
 
-SERVER_URL="${SERVER_URL:-http://localhost:8080}"
+# Load .env strictly if present
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a
+    source "$SCRIPT_DIR/.env"
+    set +a
+fi
+
+SERVER_URL="${SERVER_URL:-}"
 ROOT="${ROOT:-$HOME/nas_annotation_workspace}"
 
 # Detect and use virtualenv if available

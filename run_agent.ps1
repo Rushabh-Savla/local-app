@@ -9,12 +9,20 @@ param(
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $env:PYTHONPATH = $ScriptDir
 
-if (-not $env:SERVER_URL) {
-    $env:SERVER_URL = "http://localhost:8080"
-}
-
-if (-not $env:ROOT) {
-    $env:ROOT = "$HOME\nas_annotation_workspace"
+# Load .env file if present
+$envFile = Join-Path $ScriptDir ".env"
+if (Test-Path $envFile) {
+    Get-Content $envFile | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -and -not $line.StartsWith("#") -and $line.Contains("=")) {
+            $parts = $line.Split("=", 2)
+            $k = $parts[0].Trim()
+            $v = $parts[1].Trim().Trim("'").Trim('"')
+            if ($k) {
+                [Environment]::SetEnvironmentVariable($k, $v, "Process")
+            }
+        }
+    }
 }
 
 # Auto-detect virtualenv
