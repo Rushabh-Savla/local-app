@@ -1,131 +1,189 @@
-# Annotator Workstation Application (`annotator_app`)
+# Local Desktop Annotation App
 
-Cross-platform desktop application and background sync agent for computer vision dataset annotators. Designed to interact seamlessly with the Central Annotation Platform server over HTTP/REST APIs.
+This project is a local desktop annotation workstation for annotators. It runs on each annotator's laptop or PC, connects to the central server, and stores local work in a machine-specific workspace.
 
----
-
-## 🌟 Highlights & Features
-
-- **Modern Tkinter GUI (`desktop_app.py`):**
-  - Card-based UI with active assignment tracking, allocation counters, and live progress bars.
-  - Multi-step guided action flow: **Fetch Images** ➔ **Open X-AnyLabeling** ➔ **Sync & Submit Review**.
-  - Background declaration modal allowing annotators to submit non-annotated background images with structured justifications.
-  - Direct connection to Central Server (`http://192.168.1.103:8080`) with user authentication (token-based session management).
-- **Annotator Agent Engine (`annotator_agent/`):**
-  - **`api_client.py`:** Robust HTTP client supporting login, assignment claims, heartbeat pings, background declarations, and batch completion submissions.
-  - **`agent.py`:** Asynchronous lifecycle manager handling automatic assignment polling and background lease renewal.
-  - **`local_cache.py`:** Local file integrity verification (SHA-256 checks) preventing corrupted or duplicate image transfers.
-- **Cross-Platform 1-Click Launchers:**
-  - Windows: `run_gui.bat` / `run_agent.ps1`
-  - Linux/macOS: `run_gui.sh` / `run_agent.sh` / `AnnotationApp.desktop`
+This app is designed to be run locally on a workstation and is not a Dockerized service.
 
 ---
 
-## 📂 Repository Structure
+## Prerequisites
 
-```
-annotator_app/
-├── desktop_app.py            # Primary Tkinter workstation GUI application
-├── annotator_agent/          # Core client library
-│   ├── agent.py              # Background worker & lifecycle orchestration
-│   ├── api_client.py         # HTTP REST API client
-│   ├── local_cache.py        # Workspace cache & SHA-256 integrity checks
-│   └── __init__.py
-├── tests/                    # Unit & UI test suite
-│   ├── test_desktop_app.py   # Test cases for desktop application
-│   └── __init__.py
-├── run_gui.bat               # 1-Click launcher for Windows
-├── run_gui.sh                # 1-Click launcher for Linux / macOS
-├── run_agent.ps1             # Headless agent runner (Windows PowerShell)
-├── run_agent.sh              # Headless agent runner (Linux Bash)
-├── AnnotationApp.desktop     # Linux desktop application entry
-├── requirements.txt          # Client dependencies
-├── .env.example              # Sample client environment configuration
-├── pytest.ini                # Pytest configuration
-└── .github/workflows/
-    └── app_tests.yml         # Automated CI testing pipeline
+- Python 3.10 or newer is recommended
+- Tkinter support for the desktop GUI
+- Access to the central annotation platform running at a known server URL
+- Local folder permissions for the workspace storage path
+
+> Different PCs may use different Python versions and folder layouts. That is why the project uses a local virtual environment and a per-machine `.env` file.
+
+---
+
+## Project Structure
+
+```text
+local-app/
+├── README.md
+├── .env.example
+├── .env                     # local machine config; not committed to Git
+├── .gitignore              # excludes local secrets and virtualenvs
+├── config.env              # NAS/dataset workflow configuration
+├── requirements_agent.txt
+├── desktop_app.py          # main GUI application
+├── run_gui.sh              # Linux/macOS launcher
+├── run_gui.bat             # Windows launcher
+├── run_agent.sh            # Linux CLI launcher
+├── run_agent.ps1           # Windows PowerShell launcher
+├── annotator_agent/
+│   ├── __init__.py
+│   ├── agent.py
+│   ├── api_client.py
+│   └── local_cache.py
+└── scripts/
+    └── manager.py
 ```
 
 ---
 
-## 🚀 Quickstart Installation
+## What each config file is for
 
-### 1. Prerequisites
-- Python 3.10+ installed
-- Pip package manager
-- Network connectivity to the central server (`http://192.168.1.103:8080`)
+1. `.env` — machine-specific runtime config for the desktop app
+   - `SERVER_URL` = central platform URL for this PC
+   - `ROOT` = local working directory for downloaded annotation data
 
-### 2. Setup Virtual Environment
+2. `.env.example` — template for new machines
+   - copy it to `.env` and customize for the current PC
 
-#### On Windows:
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
+3. `config.env` — helper/NAS workflow settings
+   - used for dataset and NAS-related workflows
+   - not for the app login URL
 
-#### On Linux / macOS:
+---
+
+## Setup on Your Machine
+
+### 1) Create a virtual environment
+
+#### Linux / macOS
 ```bash
+cd local-app
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+pip install -r requirements_agent.txt
 ```
 
----
+#### Windows PowerShell
+```powershell
+cd local-app
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements_agent.txt
+```
 
-## 💻 Running the Application
+#### Windows CMD
+```cmd
+cd local-app
+py -3.11 -m venv .venv
+.venv\Scripts\activate.bat
+python -m pip install --upgrade pip
+pip install -r requirements_agent.txt
+```
 
-### Option A: GUI Mode (Standard for Human Annotators)
+> If your PC uses Python 3.12 instead, replace `3.11` with your installed version. The important part is to keep the environment local to that machine.
 
-- **Windows:** Double-click `run_gui.bat` or run:
-  ```powershell
-  python desktop_app.py
-  ```
-- **Linux:** Run:
-  ```bash
-  chmod +x run_gui.sh
-  ./run_gui.sh
-  ```
-
-### Option B: Headless Agent Mode
-
-Runs the background sync daemon without the graphical interface:
+### 2) Create the local app env file
 ```bash
-./run_agent.sh --server http://192.168.1.103:8080 --username <username> --password <password>
+cp .env.example .env
 ```
 
----
+Then edit `.env` for your machine:
 
-## 🔄 Daily Annotator Workflow
-
-1. **Connect & Authenticate:**
-   - Launch `desktop_app.py`.
-   - Enter Central Server URL (default: `http://192.168.1.103:8080`) and your credentials.
-   - Click **Connect & Login**.
-2. **Fetch Assigned Images:**
-   - The UI automatically loads your active batch from the server.
-   - Click **📥 Step 1: Fetch Batch Images** to download image packages into your local workspace.
-3. **Annotate in Tooling:**
-   - Click **🎨 Step 2: Open Annotation Tool** (launches X-AnyLabeling or your preferred tool pointed at your workspace).
-   - Draw labels, bounding boxes, or polygons.
-4. **Mark Background Items (if applicable):**
-   - If an image contains no detectable targets, use the **Mark as Background** button to declare it with a reason.
-5. **Sync & Submit for Master Approval:**
-   - Click **☁️ Step 3: Sync & Submit for Review**.
-   - Your local annotations are verified and uploaded to the central server for master review.
-
----
-
-## 🧪 Testing
-
-Run automated tests:
 ```bash
-pytest tests/ -v
+SERVER_URL="http://<SERVER_IP>:8080"
+ROOT="$HOME/nas_annotation_workspace"
+```
+
+Example on Linux:
+```bash
+SERVER_URL="http://192.168.1.10:8080"
+ROOT="/home/easemyai/nas_annotation_workspace"
+# Or conveniently:
+# ROOT="$HOME/nas_annotation_workspace"
+```
+
+Example on Windows:
+```bash
+SERVER_URL="http://192.168.1.103:8080"
+ROOT="C:\\nas_annotation_workspace"
+```
+
+> **PermissionError Troubleshooting (`Permission denied: '/home/annotator'`):**
+> If you encounter:
+> ```text
+> PermissionError: [Errno 13] Permission denied: '/home/annotator'
+> ```
+> This occurs because `.env` is set to `/home/annotator/nas_annotation_workspace`, but your Linux username is different (e.g. `easemyai`). Linux users do not have permissions to create new folders directly in `/home/`.
+> **Fix:** Change `ROOT` in `.env` to point inside your actual user directory, e.g.:
+> `ROOT="$HOME/nas_annotation_workspace"` or `ROOT="/home/<your_username>/nas_annotation_workspace"`.
+
+### 3) Run the app
+
+#### Linux / macOS
+```bash
+cd local-app
+source .venv/bin/activate
+./run_gui.sh
+```
+
+Or directly:
+```bash
+python3 desktop_app.py
+```
+
+#### Windows
+```cmd
+cd local-app
+.venv\Scripts\activate.bat
+run_gui.bat
 ```
 
 ---
 
-## 🔗 Related Repositories
+## Runtime Configuration Notes
 
-- **Main Orchestration Repo:** [Rushabh-Savla/nas_annotation_automation](https://github.com/Rushabh-Savla/nas_annotation_automation)
-- **Web Admin Subrepo:** [Rushabh-Savla/admin_webpage](https://github.com/Rushabh-Savla/admin_webpage)
+- Each PC should have its own `.env` file.
+- Do not commit `.env` to Git.
+- Keep `SERVER_URL` and `ROOT` local to the machine.
+- `config.env` is separate and may be used by NAS helper scripts.
+
+Example `config.env` for a dataset workflow:
+
+```bash
+REMOTE="annotation_nas"
+DATASET="ai_data_collection/test/new_dataset/n01494475"
+ROOT="/home/<your_user>/nas_annotation_workspace"
+```
+
+Do not put the server URL into `config.env` unless a helper script specifically expects it.
+
+---
+
+## Login and Usage
+
+1. Launch the desktop app.
+2. Enter the annotator username and password.
+3. The latest username and password are saved locally on that PC.
+4. When the app restarts, the last-entered credentials are restored automatically.
+5. The app fetches assigned batches from the central platform and uploads completed work.
+
+---
+
+## Production-Ready Notes
+
+- Keep `.env` out of source control.
+- Keep the Python environment inside the repo or local workstation folder, not system-wide.
+- Each annotator machine should have its own `ROOT` path and `SERVER_URL` values.
+- Use the same repo codebase but different local runtime settings per machine.
+
+This keeps the project portable across different laptops and PCs while remaining easy to run and safe for GitHub-based collaboration.
+

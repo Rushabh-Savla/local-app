@@ -17,18 +17,52 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger("annotator_agent")
 
 
+def _load_env_if_present() -> None:
+    candidates = [
+        Path(__file__).resolve().parent.parent / ".env",
+        Path.cwd() / ".env",
+    ]
+    for c in candidates:
+        if c.is_file():
+            try:
+                with open(c, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip("'\"")
+                        if " #" in v:
+                            v = v.split(" #", 1)[0].strip()
+                        elif "\t#" in v:
+                            v = v.split("\t#", 1)[0].strip()
+                        v = os.path.expandvars(os.path.expanduser(v)).strip()
+                        if k:
+                            os.environ[k] = v
+                break
+            except Exception:
+                pass
+
+
+_load_env_if_present()
+
+
 class AnnotatorAgent:
     """Desktop agent running on annotator workstation."""
 
     def __init__(
         self,
-        server_url: str = "http://localhost:8000",
-        local_root: str = "~/nas_annotation_workspace",
+        server_url: Optional[str] = None,
+        local_root: Optional[str] = None,
         batch_size: Optional[int] = None,
         xanylabeling_bin: str = "xanylabeling",
     ):
-        self.server_url = server_url
-        self.root = Path(local_root).expanduser().resolve()
+        resolved_url = server_url or os.getenv("SERVER_URL") or os.getenv("PUBLIC_BASE_URL") or ""
+        self.server_url = resolved_url.rstrip("/")
+        clean_root = str(local_root or os.getenv("ROOT") or "~/nas_annotation_workspace").strip().strip("'\"")
+        clean_root = os.path.expandvars(os.path.expanduser(clean_root))
+        self.root = Path(clean_root).resolve()
         self.batch_size = batch_size
         self.xanylabeling_bin = xanylabeling_bin
 
@@ -292,6 +326,7 @@ class AnnotatorAgent:
         errors = 0
         submitted_file_ids = set()
 
+        batch_items = []
         for local_json in local_json_files:
             stem_key = local_json.stem.lower()
             if stem_key not in items_by_stem:
@@ -318,21 +353,43 @@ class AnnotatorAgent:
 
             # Idempotency key per file submission
             idemp_key = f"sub_{assignment_id}_{item_data['file_id']}_{content_hash[:16]}"
+            batch_items.append({
+                "file_id": item_data["file_id"],
+                "idempotency_key": idemp_key,
+                "content_hash": content_hash,
+                "annotation_json": annotation_data,
+            })
+
+        if batch_items:
             try:
-                self.client.submit_annotation(
+                resp = self.client.submit_annotations_bulk(
                     assignment_id=assignment_id,
-                    file_id=item_data["file_id"],
                     ownership_generation=ownership_generation,
-                    idempotency_key=idemp_key,
-                    content_hash=content_hash,
-                    annotation_json=annotation_data,
+                    items=batch_items,
                 )
-                self.cache.mark_submitted(assignment_id, item_data["file_id"])
-                submitted += 1
-                submitted_file_ids.add(item_data["file_id"])
+                submitted = resp.get("submitted_count", len(batch_items))
+                for itm in batch_items:
+                    self.cache.mark_submitted(assignment_id, itm["file_id"])
+                    submitted_file_ids.add(itm["file_id"])
+                logger.info(f"Successfully submitted batch of {submitted} annotations in 1 single HTTP request.")
             except Exception as exc:
-                logger.error(f"Submission failed for {local_json.name}: {exc}")
-                errors += 1
+                logger.warning(f"Bulk submission fell back to individual submit: {exc}")
+                for itm in batch_items:
+                    try:
+                        self.client.submit_annotation(
+                            assignment_id=assignment_id,
+                            file_id=itm["file_id"],
+                            ownership_generation=ownership_generation,
+                            idempotency_key=itm["idempotency_key"],
+                            content_hash=itm["content_hash"],
+                            annotation_json=itm["annotation_json"],
+                        )
+                        self.cache.mark_submitted(assignment_id, itm["file_id"])
+                        submitted += 1
+                        submitted_file_ids.add(itm["file_id"])
+                    except Exception as sub_exc:
+                        logger.error(f"Fallback submit failed for file {itm['file_id']}: {sub_exc}")
+                        errors += 1
 
         # Optionally declare remaining local batch images as background
         background_count = 0
@@ -418,8 +475,8 @@ class AnnotatorAgent:
 
 def main():
     parser = argparse.ArgumentParser(description="Central Annotator Desktop Agent")
-    parser.add_argument("--server-url", default=os.getenv("SERVER_URL", "http://localhost:8080"))
-    parser.add_argument("--local-root", default=os.getenv("ROOT", "~/nas_annotation_workspace"))
+    parser.add_argument("--server-url", default=os.getenv("SERVER_URL") or os.getenv("PUBLIC_BASE_URL") or "")
+    parser.add_argument("--local-root", default=os.getenv("ROOT") or "~/nas_annotation_workspace")
     parser.add_argument("--batch-size", type=int, default=100)
     parser.add_argument("--xanylabeling", default="xanylabeling")
 

@@ -139,6 +139,24 @@ class AnnotationServerClient:
             raise RuntimeError(f"Submission failed for file {file_id}: {resp.text}")
         return resp.json()
 
+    def submit_annotations_bulk(
+        self,
+        assignment_id: int,
+        ownership_generation: int,
+        items: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Submit multiple completed annotations to server in 1 single atomic HTTP payload."""
+        url = f"{self.base_url}/api/v1/submissions/bulk"
+        payload = {
+            "assignment_id": assignment_id,
+            "ownership_generation": ownership_generation,
+            "items": items,
+        }
+        resp = self._client.post(url, headers=self.headers, json=payload, timeout=120.0)
+        if resp.status_code not in (200, 201):
+            raise RuntimeError(f"Bulk submission failed: {resp.text}")
+        return resp.json()
+
     def declare_bulk_background(
         self,
         assignment_id: int,

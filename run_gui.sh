@@ -11,6 +11,8 @@ export PYTHONPATH="$SCRIPT_DIR"
 PYTHON_BIN="python3"
 if [ -f "$SCRIPT_DIR/.venv/bin/python3" ]; then
     PYTHON_BIN="$SCRIPT_DIR/.venv/bin/python3"
+elif [ -f "$SCRIPT_DIR/../.venv/bin/python3" ]; then
+    PYTHON_BIN="$SCRIPT_DIR/../.venv/bin/python3"
 elif [ -n "${VIRTUAL_ENV:-}" ] && [ -f "$VIRTUAL_ENV/bin/python3" ]; then
     PYTHON_BIN="$VIRTUAL_ENV/bin/python3"
 fi

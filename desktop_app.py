@@ -48,22 +48,57 @@ CONFIG_PATH = PROJECT_ROOT / "config.env"
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 
 
-def _load_env_file() -> None:
-    env_file = PROJECT_ROOT / ".env"
-    if env_file.is_file():
-        try:
-            with open(env_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("#") or "=" not in line:
-                        continue
-                    k, v = line.split("=", 1)
-                    k = k.strip()
-                    v = v.strip().strip("'\"")
-                    if k and k not in os.environ:
-                        os.environ[k] = v
-        except Exception:
-            pass
+ENV_CONFIG: Dict[str, str] = {}
+
+
+def _load_env_file() -> Dict[str, str]:
+    """Strictly load and parse key-value pairs from .env file into ENV_CONFIG and os.environ.
+    
+    Values in .env strictly override any ambient environment variables so that local
+    configuration is always respected without falling back to arbitrary hardcoded defaults.
+    """
+    global ENV_CONFIG
+    candidates = [
+        PROJECT_ROOT / ".env",
+        Path.cwd() / ".env",
+    ]
+    env_file = None
+    for c in candidates:
+        if c.is_file():
+            env_file = c
+            break
+
+    if not env_file:
+        return ENV_CONFIG
+
+    try:
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip()
+                # Remove enclosing quotes
+                if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+                    v = v[1:-1]
+                else:
+                    # Strip inline comments if present
+                    if " #" in v:
+                        v = v.split(" #", 1)[0].strip()
+                    elif "\t#" in v:
+                        v = v.split("\t#", 1)[0].strip()
+
+                v = os.path.expandvars(os.path.expanduser(v)).strip()
+                if k:
+                    ENV_CONFIG[k] = v
+                    # Strictly override os.environ with the explicit .env value
+                    os.environ[k] = v
+    except Exception as exc:
+        print(f"Warning: Failed to parse .env file at {env_file}: {exc}")
+
+    return ENV_CONFIG
 
 
 _load_env_file()
@@ -159,6 +194,8 @@ def validate_config(cfg: Dict[str, str]) -> Tuple[bool, List[str]]:
         errors.append("DATASET is required in config.env.")
     if root:
         root_path = Path(root).expanduser()
+        if not root_path.is_absolute():
+            errors.append("ROOT must be an absolute path, for example /home/annotator/nas_annotation_workspace")
         if not root_path.exists():
             parent = root_path.parent
             if not parent.exists():
@@ -308,6 +345,7 @@ class AnnotationDesktopApp(tk.Tk):
         self.minsize(980, 680)
         self.project_root = PROJECT_ROOT
         self.config_path = CONFIG_PATH
+        self.credentials_file = self.project_root / ".app_credentials.json"
         self.active_task: str | None = None
         self.agent: AnnotatorAgent | None = None
         self.my_assignments_data: List[Dict[str, Any]] = []
@@ -495,21 +533,74 @@ class AnnotationDesktopApp(tk.Tk):
         )
 
     def _get_default_server_url(self) -> str:
-        return os.getenv("SERVER_URL") or os.getenv("PUBLIC_BASE_URL") or "http://192.168.1.103:8080"
+        """Strictly read server URL from .env file, eliminating hardcoded default IPs."""
+        url = (
+            ENV_CONFIG.get("SERVER_URL")
+            or os.getenv("SERVER_URL")
+            or ENV_CONFIG.get("PUBLIC_BASE_URL")
+            or os.getenv("PUBLIC_BASE_URL")
+            or ""
+        ).strip()
+        return url.rstrip("/")
+
+    def _get_dashboard_url(self) -> str:
+        """Return dynamic web dashboard URL based on the active server URL."""
+        base = ""
+        central_var = self.__dict__.get("central_url_var")
+        if central_var is not None and hasattr(central_var, "get") and central_var.get().strip():
+            base = central_var.get().strip()
+        elif self.__dict__.get("agent") is not None and getattr(self.agent, "server_url", None):
+            base = self.agent.server_url.strip()
+        else:
+            base = self._get_default_server_url()
+        return f"{base.rstrip('/')}/dashboard" if base else "/dashboard"
 
     def _init_agent(self) -> None:
         if AnnotatorAgent is not None:
             default_server = self._get_default_server_url()
-            default_root = os.getenv("ROOT", str(Path.home() / "nas_annotation_workspace"))
+            raw_root = (ENV_CONFIG.get("ROOT") or os.getenv("ROOT") or str(Path.home() / "nas_annotation_workspace")).strip().strip("'\"")
+            default_root = os.path.expandvars(os.path.expanduser(raw_root))
             self.agent = AnnotatorAgent(server_url=default_server, local_root=default_root)
+
+    def _load_saved_credentials(self) -> tuple[str, str]:
+        default_user = "annotator1"
+        default_pass = "Annotator@2026"
+        try:
+            if self.credentials_file.exists():
+                data = json.loads(self.credentials_file.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    saved_user = str(data.get("username", default_user)).strip()
+                    saved_pass = str(data.get("password", default_pass)).strip()
+                    if saved_user:
+                        default_user = saved_user
+                    if saved_pass:
+                        default_pass = saved_pass
+        except Exception:
+            pass
+        return default_user, default_pass
+
+    def _save_credentials(self, username: str, password: str) -> None:
+        try:
+            payload = {
+                "username": (username or "").strip(),
+                "password": (password or "").strip(),
+            }
+            self.credentials_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            try:
+                os.chmod(self.credentials_file, 0o600)
+            except OSError:
+                pass
+        except Exception:
+            pass
 
     def _init_state_vars(self) -> None:
         # Central auth & status variables
         default_server = self._get_default_server_url()
+        saved_user, saved_pass = self._load_saved_credentials()
         self.central_url_var = tk.StringVar(value=default_server)
-        self.central_user_var = tk.StringVar(value="annotator1")
-        self.central_pass_var = tk.StringVar(value="Annotator@2026")
-        self.central_auth_status_var = tk.StringVar(value="Checking connection...")
+        self.central_user_var = tk.StringVar(value=saved_user)
+        self.central_pass_var = tk.StringVar(value=saved_pass)
+        self.central_auth_status_var = tk.StringVar(value="Checking connection..." if default_server else "Server URL missing in .env")
         self.central_assign_var = tk.StringVar(value="No active assignment loaded.")
         self.central_counts_var = tk.StringVar(value="Images in workspace: 0 | Annotated: 0")
         self.nas_assigned_path_var = tk.StringVar(value="None")
@@ -1156,6 +1247,7 @@ class AnnotationDesktopApp(tk.Tk):
         tk.Label(form, text="Username:", font=self.font_body_bold, fg=self.C_TEXT_PRIMARY, bg=self.C_CARD_BG).pack(anchor="w", pady=(0, 4))
         self.login_user_entry = ttk.Entry(form, textvariable=self.central_user_var, font=self.font_body, width=32)
         self.login_user_entry.pack(fill="x", pady=(0, 12))
+        self.login_user_entry.bind("<KeyRelease>", lambda e: self._save_credentials(self.central_user_var.get(), self.central_pass_var.get()))
 
         tk.Label(form, text="Password:", font=self.font_body_bold, fg=self.C_TEXT_PRIMARY, bg=self.C_CARD_BG).pack(anchor="w", pady=(0, 4))
 
@@ -1164,37 +1256,10 @@ class AnnotationDesktopApp(tk.Tk):
 
         self.login_pass_entry = ttk.Entry(pass_row, textvariable=self.central_pass_var, show="*", font=self.font_body)
         self.login_pass_entry.pack(side="left", fill="x", expand=True)
+        self.login_pass_entry.bind("<KeyRelease>", lambda e: self._save_credentials(self.central_user_var.get(), self.central_pass_var.get()))
 
         self.btn_login_toggle_pass = ttk.Button(pass_row, text="👁 Show", width=7, command=self._toggle_login_pass_visibility)
         self.btn_login_toggle_pass.pack(side="left", padx=(6, 0))
-
-        # Advanced Server Connection Toggle
-        self.login_server_frame = tk.Frame(card_inner, bg=self.C_CARD_BG)
-
-        def toggle_server():
-            if self.login_server_frame.winfo_ismapped():
-                self.login_server_frame.pack_forget()
-                self.btn_toggle_server.configure(text="⚙️ Advanced Server Settings ▼")
-            else:
-                self.login_server_frame.pack(fill="x", pady=(0, 12), before=self.login_btn_row)
-                self.btn_toggle_server.configure(text="⚙️ Hide Server Settings ▲")
-
-        self.btn_toggle_server = tk.Button(
-            card_inner,
-            text="⚙️ Advanced Server Settings ▼",
-            font=("Helvetica", 8),
-            fg=self.C_TEXT_MUTED,
-            bg=self.C_CARD_BG,
-            activeforeground=self.C_PRIMARY,
-            activebackground=self.C_CARD_BG,
-            bd=0,
-            cursor="hand2",
-            command=toggle_server,
-        )
-        self.btn_toggle_server.pack(anchor="w", pady=(0, 8))
-
-        tk.Label(self.login_server_frame, text="Server URL:", font=self.font_sub, fg=self.C_TEXT_MUTED, bg=self.C_CARD_BG).pack(anchor="w", pady=(0, 2))
-        ttk.Entry(self.login_server_frame, textvariable=self.central_url_var, font=self.font_sub).pack(fill="x")
 
         # Error label
         tk.Label(
@@ -2116,7 +2181,10 @@ class AnnotationDesktopApp(tk.Tk):
         username = self.central_user_var.get().strip()
         password = self.central_pass_var.get().strip()
 
-        if not server_url or not username or not password:
+        if not server_url:
+            self.login_error_var.set("Server URL is missing! Set SERVER_URL in .env or enter it above.")
+            return
+        if not username or not password:
             self.login_error_var.set("Please enter both Username and Password.")
             return
 
@@ -2133,6 +2201,7 @@ class AnnotationDesktopApp(tk.Tk):
                 self.agent.server_url = server_url
                 self.agent.client.base_url = server_url
                 self.agent.login(username, password)
+                self._save_credentials(username, password)
                 self.is_logged_in = True
                 self.central_log(f"✅ Successfully logged in as '{username}' to {server_url}")
 
@@ -2642,7 +2711,7 @@ class AnnotationDesktopApp(tk.Tk):
                 "Sync Annotations to Web & NAS",
                 f"Annotation session finished!\n\n"
                 f"You have {len(jsons)} saved annotation(s) on your computer.\n\n"
-                f"Would you like to sync them now so your progress is updated on the Web Dashboard (http://192.168.1.103:8080/dashboard)?",
+                f"Would you like to sync them now so your progress is updated on the Web Dashboard ({self._get_dashboard_url()})?",
             )
             if sync_now:
                 self.central_sync()
@@ -2976,7 +3045,7 @@ class AnnotationDesktopApp(tk.Tk):
                                 f"• Total Batch Completed: {submitted + background}\n\n"
                                 f"Your work is safely recorded on the Central Server and synced to NAS.\n"
                                 f"Your local workspace is cleaned and ready for the next batch!\n\n"
-                                f"Live Web Dashboard: http://192.168.1.103:8080/dashboard",
+                                f"Live Web Dashboard: {self._get_dashboard_url()}",
                             ),
                         )
                     else:
@@ -2992,7 +3061,7 @@ class AnnotationDesktopApp(tk.Tk):
                                 f"• Uploaded & Verified: {submitted} annotation(s)\n\n"
                                 f"Your work is safely saved on the Central Server and synced to NAS.\n"
                                 f"The remaining unannotated images stay on your computer so you can continue labeling.\n\n"
-                                f"Live Web Dashboard: http://192.168.1.103:8080/dashboard",
+                                f"Live Web Dashboard: {self._get_dashboard_url()}",
                             ),
                         )
                 else:
