@@ -3,7 +3,9 @@ Version=1.0
 Type=Application
 Name=NAS Annotation Workstation
 Comment=Centralized Dataset Annotation Desktop App
-Exec=bash -c "cd \"\$(dirname \"%k\")\" && ./run_gui.sh"
+Exec="/mnt/d/EaseMyAi/annotation_automation/nas_annotation_automation/local-app/run_gui.sh"
+Path=/mnt/d/EaseMyAi/annotation_automation/nas_annotation_automation/local-app
+Icon=/mnt/d/EaseMyAi/annotation_automation/nas_annotation_automation/local-app/assets/app_icon.png
 Terminal=false
 Categories=Graphics;Development;
-
+StartupNotify=true

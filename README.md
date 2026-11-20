@@ -147,6 +147,18 @@ cd local-app
 run_gui.bat
 ```
 
+### 3.3 Install 1-Click Desktop Icon
+To create a branded launcher icon directly on your Desktop and Applications/Start Menu:
+- **Linux / macOS:**
+  ```bash
+  ./setup_desktop.sh
+  ```
+- **Windows:** Double-click `setup_desktop.bat` or run:
+  ```cmd
+  setup_desktop.bat
+  ```
+This creates a desktop shortcut with full icon branding and path auto-discovery that launches the application properly from anywhere.
+
 ---
 
 ## Runtime Configuration Notes

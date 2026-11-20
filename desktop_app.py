@@ -344,6 +344,21 @@ class AnnotationDesktopApp(tk.Tk):
         self.geometry("1180x820")
         self.minsize(980, 680)
         self.project_root = PROJECT_ROOT
+
+        # Window & Taskbar Icon
+        icon_png = self.project_root / "assets" / "app_icon.png"
+        icon_ico = self.project_root / "assets" / "app_icon.ico"
+        if icon_png.exists():
+            try:
+                self._app_icon_img = tk.PhotoImage(file=str(icon_png))
+                self.iconphoto(True, self._app_icon_img)
+            except Exception:
+                pass
+        if sys.platform == "win32" and icon_ico.exists():
+            try:
+                self.iconbitmap(str(icon_ico))
+            except Exception:
+                pass
         self.config_path = CONFIG_PATH
         self.credentials_file = self.project_root / ".app_credentials.json"
         self.active_task: str | None = None
