@@ -192,41 +192,25 @@ class AnnotatorAgent:
                 logger.info(f"Single batch download complete: {found_count} images saved to {self.current_dir}.")
                 return found_count
             else:
-                logger.warning(f"Bundle contained {found_count} images; falling back to individual download.")
+                raise RuntimeError(
+                    "Assignment bundle contained zero images. "
+                    "Individual image fallback is disabled."
+                )
 
         except Exception as exc:
-            logger.warning(f"Single-batch bundle transfer fell back to parallel fetch: {exc}")
+            try:
+                bundle_zip.unlink(missing_ok=True)
+            except Exception:
+                pass
 
-        # 2. Fallback: item-by-item download
-        pending_items = self.cache.get_pending_download_items(assignment_id, limit=effective_limit)
-        if not pending_items:
-            logger.info("No pending items to download for active assignment.")
-            return 0
-
-        total_pending = len(pending_items)
-        logger.info(f"Downloading batch of {total_pending} images...")
-
-        downloaded = 0
-        for item in pending_items:
-            file_id = item["file_id"]
-            rel_path = item["relative_path"]
-            target_path = self.current_dir / rel_path
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-
-            img_bytes = self.client.download_image(assignment_id, file_id)
-            target_path.write_bytes(img_bytes)
-
-            file_hash = hashlib.sha256(img_bytes).hexdigest()
-            self.cache.mark_downloaded(assignment_id, file_id, file_hash)
-            downloaded += 1
-            if progress_callback:
-                try:
-                    progress_callback(downloaded, total_pending)
-                except Exception:
-                    pass
-
-        logger.info(f"Batch download complete: {downloaded} images saved to {self.current_dir}.")
-        return downloaded
+            logger.exception(
+                "Assignment bundle download failed. "
+                "Individual image fallback is disabled."
+            )
+            raise RuntimeError(
+                "Assignment bundle is unavailable. "
+                "Retry after assignment preparation completes."
+            ) from exc
 
     def find_xanylabeling(self) -> Optional[str]:
         """Locate the XAnyLabeling binary across known locations and virtual environments."""
